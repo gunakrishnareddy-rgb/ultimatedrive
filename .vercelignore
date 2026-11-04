@@ -1,0 +1,11 @@
+Assets/
+Packages/
+ProjectSettings/
+UserSettings/
+Library/
+Temp/
+Logs/
+Obj/
+Builds/
+Docs/
+.github/

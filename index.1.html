@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0b0e">
+<meta name="description" content="ULTIMATE DRIVE - Drive beyond limits. Experience the freedom.">
+<title>ULTIMATE DRIVE</title>
+<style>
+  :root{--blue:#1a8cff;--orange:#ff7314;--bg:#0a0b0e;--panel:#12141a}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:#fff;font-family:system-ui,"Segoe UI",Roboto,Arial,sans-serif;overflow:hidden;
+    overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+  #game{position:fixed;inset:0;width:100%;height:100%;display:block;background:#000;outline:none}
+
+  /* loading screen */
+  #loader{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;
+    background:radial-gradient(ellipse at 50% 35%,#16202e 0%,var(--bg) 70%);transition:opacity .6s ease;z-index:10}
+  #loader.hide{opacity:0;pointer-events:none}
+  h1{margin:0;font-size:clamp(38px,9vw,112px);letter-spacing:.04em;line-height:1}
+  h1 span{color:var(--orange)}
+  .tag{margin:.7em 0 2.2em;color:#9cc9ff;letter-spacing:.14em;font-size:clamp(11px,2.1vw,20px)}
+  .bar{width:min(520px,80vw);height:10px;border-radius:99px;background:#1c2029;overflow:hidden}
+  .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--orange));transition:width .15s linear}
+  #status{margin-top:14px;color:#8d95a5;font-size:14px;letter-spacing:.08em;min-height:1.4em}
+  #help{margin-top:28px;max-width:640px;color:#aeb6c4;font-size:13px;line-height:1.7;background:var(--panel);border:1px solid #232938;border-radius:14px;padding:14px 18px}
+  #help b{color:#fff}
+  kbd{background:#1f2430;border:1px solid #2d3445;border-bottom-width:2px;border-radius:6px;padding:1px 7px;font-size:12px;color:#ffb27d}
+  #error{display:none;margin-top:22px;max-width:560px;color:#ffd2d2;background:#3a1418;border:1px solid #7a2a31;border-radius:12px;padding:14px 18px;font-size:14px;line-height:1.5;pointer-events:auto}
+  #error button{margin-top:10px}
+
+  /* buttons */
+  button{font:inherit;color:#fff;background:#1c2029;border:1px solid #2d3445;border-radius:10px;padding:9px 16px;cursor:pointer;letter-spacing:.06em}
+  button:hover{background:#262c3a}
+  #fs{position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));z-index:5;opacity:0;pointer-events:none;
+    transition:opacity .4s;background:rgba(18,20,26,.7);backdrop-filter:blur(4px);padding:8px 12px;font-size:13px}
+  #fs.show{opacity:.85;pointer-events:auto}
+
+  /* portrait hint for touch devices */
+  #rotate{position:fixed;inset:0;z-index:20;display:none;align-items:center;justify-content:center;flex-direction:column;text-align:center;
+    background:rgba(10,11,14,.94);font-size:20px;letter-spacing:.06em;padding:30px}
+  #rotate .ico{font-size:64px;margin-bottom:14px;animation:tilt 1.6s ease-in-out infinite}
+  @keyframes tilt{0%,100%{transform:rotate(0)}50%{transform:rotate(-90deg)}}
+  @media (orientation:portrait) and (pointer:coarse){#rotate{display:flex}}
+  @media (pointer:coarse){.kb{display:none}}
+  @media (pointer:fine){.touch{display:none}}
+</style>
+</head>
+<body>
+<canvas id="game" tabindex="-1"></canvas>
+
+<div id="loader">
+  <h1>ULTIMATE <span>DRIVE</span></h1>
+  <div class="tag">DRIVE BEYOND LIMITS. EXPERIENCE THE FREEDOM.</div>
+  <div class="bar"><i id="fill"></i></div>
+  <div id="status">LOADING 0%</div>
+  <div id="help">
+    <div class="kb"><b>Keyboard:</b> <kbd>W</kbd>/<kbd>S</kbd> gas &amp; brake/reverse &nbsp; <kbd>A</kbd>/<kbd>D</kbd> steer &nbsp;
+      <kbd>Space</kbd> handbrake &nbsp; <kbd>Shift</kbd> nitro &nbsp; <kbd>C</kbd> camera &nbsp; <kbd>R</kbd> reset &nbsp; <kbd>Esc</kbd> pause<br>
+      <b>Gamepad:</b> RT/LT, left stick, A handbrake, B nitro, Y camera, X reset, Start pause</div>
+    <div class="touch"><b>Touch:</b> steering wheel on the left, pedals on the right. Play in landscape.</div>
+    <div style="margin-top:6px;color:#7d8596">100% offline in your browser. Progress is saved on this device.</div>
+  </div>
+  <div id="error"></div>
+</div>
+
+<button id="fs" title="Toggle fullscreen">FULLSCREEN</button>
+<div id="rotate"><div class="ico">&#128241;</div>Rotate your phone to landscape</div>
+
+<script>
+  // Unity names the files after the build folder. The Unity build menu replaces the placeholder automatically.
+  // Opened without the replacement, it falls back to "web" (the folder the build menu writes to).
+  var BUILD = "__BUILD_NAME__".indexOf("__") === 0 ? "web" : "__BUILD_NAME__";
+  var base = "Build/" + BUILD;
+
+  var canvas  = document.getElementById("game");
+  var loader  = document.getElementById("loader");
+  var fill    = document.getElementById("fill");
+  var status_ = document.getElementById("status");
+  var errBox  = document.getElementById("error");
+  var fsBtn   = document.getElementById("fs");
+  var unity   = null;
+
+  function showError(msg, hint) {
+    status_.textContent = "";
+    errBox.style.display = "block";
+    errBox.innerHTML = "<b>The game could not start.</b><br>" + msg + (hint ? "<br><small>" + hint + "</small>" : "") +
+      "<br><button onclick='location.reload()'>TRY AGAIN</button>";
+  }
+
+  // quick capability check
+  (function () {
+    var gl = canvas.getContext("webgl2");
+    if (!gl) showError("Your browser does not support WebGL 2.", "Use a current Chrome, Edge, Firefox or Safari and make sure hardware acceleration is on.");
+  })();
+
+  var script = document.createElement("script");
+  script.src = base + ".loader.js";
+  script.onerror = function () {
+    showError("Missing file <code>" + script.src.split("/").slice(-2).join("/") + "</code>.",
+              "Build the game with UltimateDrive &gt; Build &gt; WebGL, or check that the Build folder was uploaded.");
+  };
+  script.onload = function () {
+    var config = {
+      dataUrl: base + ".data",
+      frameworkUrl: base + ".framework.js",
+      codeUrl: base + ".wasm",
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: "UltimateDrive",
+      productName: "Ultimate Drive",
+      productVersion: "0.1.0",
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2)   // cap render cost on high-DPI phones
+    };
+    createUnityInstance(canvas, config, function (p) {
+      var pct = Math.round(p * 100);
+      fill.style.width = pct + "%";
+      status_.textContent = p < 1 ? "LOADING " + pct + "%" : "STARTING...";
+    }).then(function (instance) {
+      unity = instance;
+      loader.classList.add("hide");
+      fsBtn.classList.add("show");
+      canvas.focus();
+      setTimeout(function () { loader.style.display = "none"; }, 700);
+    }).catch(function (e) {
+      console.error(e);
+      showError(String(e && e.message ? e.message : e), "If this keeps happening, the browser may have run out of memory: close other tabs and retry.");
+    });
+  };
+  document.body.appendChild(script);
+
+  // keep keyboard focus on the game (needed for arrow keys / space)
+  canvas.addEventListener("pointerdown", function () { canvas.focus(); });
+  window.addEventListener("keydown", function (e) {
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].indexOf(e.key) > -1) e.preventDefault();
+  }, { passive: false });
+
+  // fullscreen
+  fsBtn.addEventListener("click", function () {
+    var d = document, el = d.documentElement;
+    if (d.fullscreenElement || d.webkitFullscreenElement) { (d.exitFullscreen || d.webkitExitFullscreen).call(d); }
+    else if (el.requestFullscreen || el.webkitRequestFullscreen) {
+      (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+      if (screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(function () {});
+    }
+    canvas.focus();
+  });
+
+  // no context menu / pinch zoom over the game
+  document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+</script>
+</body>
+</html>

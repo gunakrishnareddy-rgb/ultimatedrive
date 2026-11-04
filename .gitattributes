@@ -1,0 +1,12 @@
+* text=auto
+*.cs      text eol=lf diff=csharp
+*.md      text eol=lf
+*.json    text eol=lf
+*.yml     text eol=lf
+*.unity   merge=unityyamlmerge eol=lf
+*.prefab  merge=unityyamlmerge eol=lf
+*.asset   merge=unityyamlmerge eol=lf
+*.meta    -text merge=binary
+# large generated build files
+web/Build/*.data* filter=lfs diff=lfs merge=lfs -text
+web/Build/*.wasm* filter=lfs diff=lfs merge=lfs -text

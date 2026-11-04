@@ -1,0 +1,58 @@
+# OPTIONAL: builds the WebGL player on GitHub and deploys it to Vercel on every push to main.
+# Needs repository secrets (see README, "Route B"). If you build locally and commit web/, you do not need this file.
+name: Build WebGL and deploy to Vercel
+
+on:
+  push:
+    branches: [main]
+    paths: ["Assets/**", "Packages/**", "ProjectSettings/**", ".github/workflows/webgl-vercel.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build WebGL
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-WebGL-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-WebGL-
+
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: WebGL
+          unityVersion: auto
+          buildMethod: UltimateDrive.EditorTools.WebBuilder.BuildForCi
+          customParameters: -udOut web
+          allowDirtyBuild: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webgl
+          path: web
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy to Vercel
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: webgl
+          path: web
+      - run: npm install --global vercel@latest
+      - run: vercel deploy --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
